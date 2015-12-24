@@ -1,0 +1,80 @@
+---
+title: "Machine Learning Project 1"
+author: "Brent Kuenzi"
+date: "December 23, 2015"
+output: html_document
+---
+
+# Synopsis
+Using data generated from accelerometers on the belt, forearm, arm, and dumbell of 6 participants who were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The goal of this project is to predict the manner in which they did the exercise.  
+
+# Data and Dependencies
+Lets start by loading the data and required packages
+
+```{r}
+library(caret); library(ggplot2); library(dplyr); library(corrplot)
+library(doParallel)
+registerDoParallel(cores=2)
+
+train_set <- read.csv(file="pml-training.csv")
+test_set <- read.csv(file="pml-testing.csv")
+```
+
+# Preprocessing
+First we will split the **training** set into *test* and *train* set for accuracy predictions. Then will will perform some basic preprocessing. For ease of use, we will perform the following preprocessing steps:
+
+* Remove columns with all NA values
+* Remove the first column (index variable)
+* Remove user_name, timestamp and window variables which are not useful for prediction
+
+```{r,cache=TRUE}
+set.seed(1234); library(randomForest)
+inTrain <- createDataPartition(y=train_set$classe, p=0.7, list=FALSE)
+cv_train <- train_set[inTrain,]
+cv_test <- train_set[-inTrain,]
+```
+There are lots of columns with mostly NA values and these should be removed as they will not be useful for prediction
+```{r,cache=TRUE}
+test_NA <- sapply(cv_test, function(x) {sum(is.na(x))})
+table(test_NA)
+# remove columns of all NA values
+train_col <- cv_train[, colSums(is.na(cv_train)) != 13453]
+# remove unnecessary timestamp and factor variables
+train <- train_col[,-(1:6)]
+train[,1:86] <- as.data.frame(sapply(train[,1:86], function(x) {as.numeric(x)}))
+# Same with test set
+test <- cv_test[, colnames(cv_test) %in% colnames(train)]
+test[,1:86] <- as.data.frame(sapply(test[,1:86], function(x) {as.numeric(x)}))
+
+```
+
+# Data Exploration
+A number of variables within the training set seem to be highly correlated. This should allow modeling to create a rather robust prediction.
+```{r}
+corrs <- cor(subset(train, select=-c(classe)))
+corrplot(corrs, order="hclust", tl.cex=0.5)
+```
+
+# Model Building and Evaluation
+We will now create a model to predict the *classe* variable using a random forest model
+```{r, cache=TRUE}
+MyTrainControl=trainControl( 
+  method = "cv", 
+  number=5, 
+  returnResamp = "all", 
+   classProbs = TRUE 
+)
+model <- train(classe~., method="parRF", trControl = MyTrainControl, data=train)
+```
+
+```{r,cache=TRUE}
+modFit <- predict(model,newdata=test)
+confusionMatrix(modFit,test$classe)
+```
+
+The result of the model shows that the accuracy is 99.8 %. The sensitivity and the specificity are higher than 99% for each class. We estimate our out of sample error to be 0.2%. Taking a look at the variables that were most important in prediction (below), we see that *num_window*, *roll_belt*, and *pitch_forearm* were the most important variables for this prediction model.
+```{r}
+plot(varImp(model, scale=FALSE),top=20)
+```
+
+We can now apply this model to the test cases.

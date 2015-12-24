@@ -38,13 +38,14 @@ There are lots of columns with mostly NA values and these should be removed as t
 test_NA <- sapply(cv_test, function(x) {sum(is.na(x))})
 table(test_NA)
 # remove columns of all NA values
-train_col <- cv_train[, colSums(is.na(cv_train)) != 13453]
+train_col2 <- cv_train[, colSums(is.na(test_set)) != 20] # validation set
+train_col <- train_col2[, colSums(is.na(train_col2)) != 13453] # cv test set
 # remove unnecessary timestamp and factor variables
 train <- train_col[,-(1:6)]
-train[,1:86] <- as.data.frame(sapply(train[,1:86], function(x) {as.numeric(x)}))
+train[,1:53] <- as.data.frame(sapply(train[,1:53], function(x) {as.numeric(x)}))
 # Same with test set
 test <- cv_test[, colnames(cv_test) %in% colnames(train)]
-test[,1:86] <- as.data.frame(sapply(test[,1:86], function(x) {as.numeric(x)}))
+test[,1:53] <- as.data.frame(sapply(test[,1:53], function(x) {as.numeric(x)}))
 
 ```
 
@@ -64,17 +65,30 @@ MyTrainControl=trainControl(
   returnResamp = "all", 
    classProbs = TRUE 
 )
-model <- train(classe~., method="parRF", trControl = MyTrainControl, data=train)
+model2 <- train(classe~., method="parRF", trControl = MyTrainControl, data=train)
 ```
 
 ```{r,cache=TRUE}
-modFit <- predict(model,newdata=test)
+modFit <- predict(model2,newdata=test)
 confusionMatrix(modFit,test$classe)
 ```
 
 The result of the model shows that the accuracy is 99.8 %. The sensitivity and the specificity are higher than 99% for each class. We estimate our out of sample error to be 0.2%. Taking a look at the variables that were most important in prediction (below), we see that *num_window*, *roll_belt*, and *pitch_forearm* were the most important variables for this prediction model.
 ```{r}
-plot(varImp(model, scale=FALSE),top=20)
+plot(varImp(model2, scale=FALSE),top=20)
 ```
 
 We can now apply this model to the test cases.
+```{r}
+test2 <- test_set[, colnames(test_set) %in% colnames(train)]
+test2[,1:53] <- as.data.frame(sapply(test2[,1:53], function(x) {as.numeric(x)}))
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+modFit2 <- predict(model2,newdata=test2)
+pml_write_files(modFit2)
+```
